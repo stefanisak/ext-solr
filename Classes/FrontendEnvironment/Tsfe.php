@@ -34,6 +34,7 @@ use TYPO3\CMS\Core\Exception\SiteNotFoundException;
 use TYPO3\CMS\Core\Http\ServerRequest;
 use TYPO3\CMS\Core\Localization\Locales;
 use TYPO3\CMS\Core\Routing\PageArguments;
+use TYPO3\CMS\Core\Utility\RootlineUtility;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Site\SiteFinder;
 use TYPO3\CMS\Core\TypoScript\TemplateService;
@@ -147,12 +148,7 @@ class Tsfe implements SingletonInterface
             // for certain situations we need to trick TSFE into granting us
             // access to the page in any case to make getPageAndRootline() work
             // see http://forge.typo3.org/issues/42122
-            $pageRecord = BackendUtility::getRecord('pages', $pageId, 'fe_group');
-            if (!empty($pageRecord['fe_group'])) {
-                $userGroups = explode(',', $pageRecord['fe_group']);
-            } else {
-                $userGroups = [0, -1];
-            }
+            $userGroups = $this->getGroupsRecursive($pageId);
             $feUser->user = ['uid' => 0, 'username' => '', 'usergroup' => implode(',', $userGroups) ];
             $feUser->fetchGroupData();
             $context->setAspect('frontend.user', GeneralUtility::makeInstance(UserAspect::class, $feUser, $userGroups));
@@ -430,5 +426,16 @@ class Tsfe implements SingletonInterface
         }
 
         return $absRefPrefix;
+    }
+
+    private function getGroupsRecursive(int $pageId): array
+    {
+        $rootline = GeneralUtility::makeInstance(RootlineUtility::class, $pageId)->get();
+        foreach ($rootline as $i) {
+            if ($i['fe_group'] !== '' && ((int) $i['extendToSubpages'] === 1 || (int) $i['uid'] === $pageId)) {
+                return GeneralUtility::intExplode(',', $i['fe_group']);
+            }
+        }
+        return [0, -1];
     }
 }
